@@ -41,7 +41,7 @@ function DayEventRenderer() {
 	-----------------------------------------------------------------------------*/
 	
 	
-	function renderDaySegs(segs, modifiedEventId) {
+	function renderDaySegs(segs, modifiedEventId, resources) {
 		var segmentContainer = getDaySegmentContainer();
 		var rowDivs;
 		var rowCnt = getRowCnt();
@@ -55,7 +55,7 @@ function DayEventRenderer() {
 		var seg;
 		var top;
 		var k;
-		segmentContainer[0].innerHTML = daySegHTML(segs); // faster than .html()
+		segmentContainer[0].innerHTML = daySegHTML(segs, resources); // faster than .html()
 		daySegElementResolve(segs, segmentContainer.children());
 		daySegElementReport(segs);
 		daySegHandlers(segs, segmentContainer, modifiedEventId);
@@ -115,7 +115,7 @@ function DayEventRenderer() {
 	}
 	
 	
-	function daySegHTML(segs) { // also sets seg.left and seg.outerWidth
+	function daySegHTML(segs, resources) { // also sets seg.left and seg.outerWidth
 		var rtl = opt('isRTL');
 		var i;
 		var segCnt=segs.length;
@@ -147,10 +147,21 @@ function DayEventRenderer() {
 				if (seg.isEnd) {
 					classes.push('fc-corner-left');
 				}
-				leftCol = dayOfWeekCol(seg.end.getDay()-1);
-				rightCol = dayOfWeekCol(seg.start.getDay());
-				left = seg.isEnd ? colContentLeft(leftCol) : minLeft;
-				right = seg.isStart ? colContentRight(rightCol) : maxLeft;
+				if (!resources) {
+                    leftCol = dayOfWeekCol(seg.end.getDay()-1);
+                    rightCol = dayOfWeekCol(seg.start.getDay());
+                    left = seg.isEnd ? colContentLeft(leftCol) : minLeft;
+                    right = seg.isStart ? colContentRight(rightCol) : maxLeft;
+                } else {
+                    for (var j=0;j<resources.length;j++) {
+                        if (resources[j].id === seg.event.resourceId) {
+                            leftCol = j;
+                            rightCol = j
+                            left = colContentLeft(leftCol);
+                            right = colContentRight(rightCol);
+                        }
+                    }
+                }
 			}else{
 				if (seg.isStart) {
 					classes.push('fc-corner-left');
@@ -158,10 +169,21 @@ function DayEventRenderer() {
 				if (seg.isEnd) {
 					classes.push('fc-corner-right');
 				}
-				leftCol = dayOfWeekCol(seg.start.getDay());
-				rightCol = dayOfWeekCol(seg.end.getDay()-1);
-				left = seg.isStart ? colContentLeft(leftCol) : minLeft;
-				right = seg.isEnd ? colContentRight(rightCol) : maxLeft;
+				if (!resources) {
+                    leftCol = dayOfWeekCol(seg.end.getDay()-1);
+                    rightCol = dayOfWeekCol(seg.start.getDay());
+                    left = seg.isEnd ? colContentLeft(leftCol) : minLeft;
+                    right = seg.isStart ? colContentRight(rightCol) : maxLeft;
+                } else {
+                    for (var j=0;j<resources.length;j++) {
+                        if (resources[j].id === seg.event.resourceId) {
+                            leftCol = j;
+                            rightCol = j
+                            left = colContentLeft(leftCol);
+                            right = colContentRight(rightCol);
+                        }
+                    }
+                }
 			}
 			classes = classes.concat(event.className);
 			if (event.source) {
