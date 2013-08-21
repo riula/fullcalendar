@@ -10,6 +10,7 @@ function ResourceManager(options) {
 	
     // exports
     t.fetchResources = fetchResources;
+    t.setResources = setResources;
     
     // local
     var sources = [];  // source array
@@ -131,6 +132,8 @@ function ResourceManager(options) {
             normalizers[i](source);
         }
     }
-
-
+    
+    function setResources(resources) {
+        options['resources'] = resources;
+    }
 }

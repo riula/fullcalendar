@@ -5,22 +5,17 @@ function AgendaEventRenderer() {
 	
 	// exports
 	t.renderEvents = renderEvents;
-	t.compileDaySegs = compileDaySegs; // for DayEventRenderer
 	t.clearEvents = clearEvents;
 	t.slotSegHtml = slotSegHtml;
-	t.bindDaySeg = bindDaySeg;
 	
 	
 	// imports
 	DayEventRenderer.call(t);
 	var opt = t.opt;
 	var trigger = t.trigger;
-	//var setOverflowHidden = t.setOverflowHidden;
 	var isEventDraggable = t.isEventDraggable;
 	var isEventResizable = t.isEventResizable;
 	var eventEnd = t.eventEnd;
-	var reportEvents = t.reportEvents;
-	var reportEventClear = t.reportEventClear;
 	var eventElementHandlers = t.eventElementHandlers;
 	var setHeight = t.setHeight;
 	var getDaySegmentContainer = t.getDaySegmentContainer;
@@ -29,14 +24,16 @@ function AgendaEventRenderer() {
 	var getMaxMinute = t.getMaxMinute;
 	var getMinMinute = t.getMinMinute;
 	var timePosition = t.timePosition;
+	var getIsCellAllDay = t.getIsCellAllDay;
 	var colContentLeft = t.colContentLeft;
 	var colContentRight = t.colContentRight;
-	var renderDaySegs = t.renderDaySegs;
-	var resizableDayEvent = t.resizableDayEvent; // TODO: streamline binding architecture
+	var cellToDate = t.cellToDate;
+	var segmentCompare = t.segmentCompare;
 	var getColCnt = t.getColCnt;
 	var getColWidth = t.getColWidth;
-	var getSlotHeight = t.getSlotHeight;
-	var getBodyContent = t.getBodyContent;
+	var getSnapHeight = t.getSnapHeight;
+	var getSnapMinutes = t.getSnapMinutes;
+	var getSlotContainer = t.getSlotContainer;
 	var reportEventElement = t.reportEventElement;
 	var showEvents = t.showEvents;
 	var hideEvents = t.hideEvents;
@@ -44,10 +41,15 @@ function AgendaEventRenderer() {
 	var eventResize = t.eventResize;
 	var renderDayOverlay = t.renderDayOverlay;
 	var clearOverlays = t.clearOverlays;
+	var renderDayEvents = t.renderDayEvents;
 	var calendar = t.calendar;
 	var formatDate = calendar.formatDate;
 	var formatDates = calendar.formatDates;
-	
+
+
+	// overrides
+	t.draggableDayEvent = draggableDayEvent;
+
 	
 	
 	/* Rendering
@@ -55,7 +57,6 @@ function AgendaEventRenderer() {
 	
 
 	function renderEvents(events, modifiedEventId) {
-		reportEvents(events);
 		var i, len=events.length,
 			dayEvents=[],
 			slotEvents=[];
@@ -66,52 +67,47 @@ function AgendaEventRenderer() {
 				slotEvents.push(events[i]);
 			}
 		}
+
 		if (opt('allDaySlot')) {
-			renderDaySegs(compileDaySegs(dayEvents), modifiedEventId);
+			renderDayEvents(dayEvents, modifiedEventId);
 			setHeight(); // no params means set to viewHeight
 		}
+
 		renderSlotSegs(compileSlotSegs(slotEvents), modifiedEventId);
 	}
 	
 	
 	function clearEvents() {
-		reportEventClear();
 		getDaySegmentContainer().empty();
 		getSlotSegmentContainer().empty();
 	}
-	
-	
-	function compileDaySegs(events) {
-		var levels = stackSegs(sliceSegs(events, $.map(events, exclEndDay), t.visStart, t.visEnd)),
-			i, levelCnt=levels.length, level,
-			j, seg,
-			segs=[];
-		for (i=0; i<levelCnt; i++) {
-			level = levels[i];
-			for (j=0; j<level.length; j++) {
-				seg = level[j];
-				seg.row = 0;
-				seg.level = i; // not needed anymore
-				segs.push(seg);
-			}
-		}
-		return segs;
-	}
-	
+
 	
 	function compileSlotSegs(events) {
 		var colCnt = getColCnt(),
 			minMinute = getMinMinute(),
 			maxMinute = getMaxMinute(),
-			d = addMinutes(cloneDate(t.visStart), minMinute),
+			d,
 			visEventEnds = $.map(events, slotEventEnd),
 			i, col,
 			j, level,
 			k, seg,
-			segs=[];
+			segs = [];
 		for (i=0; i<colCnt; i++) {
-			col = stackSegs(sliceSegs(events, visEventEnds, d, addMinutes(cloneDate(d), maxMinute-minMinute)));
+
+			d = cellToDate(0, i);
+			addMinutes(d, minMinute);
+
+			col = stackAgendaSegs(
+				sliceSegs(
+					events,
+					visEventEnds,
+					d,
+					addMinutes(cloneDate(d), maxMinute-minMinute)
+				)
+			);
 			countForwardSegs(col);
+
 			for (j=0; j<col.length; j++) {
 				level = col[j];
 				for (k=0; k<level.length; k++) {
@@ -121,12 +117,50 @@ function AgendaEventRenderer() {
 					segs.push(seg);
 				}
 			}
-			addDays(d, 1, true);
 		}
 		return segs;
 	}
-	
-	
+
+
+	function sliceSegs(events, visEventEnds, start, end) {
+		var segs = [],
+			i, len=events.length, event,
+			eventStart, eventEnd,
+			segStart, segEnd,
+			isStart, isEnd;
+		for (i=0; i<len; i++) {
+			event = events[i];
+			eventStart = event.start;
+			eventEnd = visEventEnds[i];
+			if (eventEnd > start && eventStart < end) {
+				if (eventStart < start) {
+					segStart = cloneDate(start);
+					isStart = false;
+				}else{
+					segStart = eventStart;
+					isStart = true;
+				}
+				if (eventEnd > end) {
+					segEnd = cloneDate(end);
+					isEnd = false;
+				}else{
+					segEnd = eventEnd;
+					isEnd = true;
+				}
+				segs.push({
+					event: event,
+					start: segStart,
+					end: segEnd,
+					isStart: isStart,
+					isEnd: isEnd,
+					msLength: segEnd - segStart
+				});
+			}
+		}
+		return segs.sort(segmentCompare);
+	}
+
+
 	function slotEventEnd(event) {
 		if (event.end) {
 			return cloneDate(event.end);
@@ -137,6 +171,8 @@ function AgendaEventRenderer() {
 	
 	
 	// renders events in the 'time slots' at the bottom
+	// TODO: when we refactor this, when user returns `false` eventRender, don't have empty space
+	// TODO: refactor will include using pixels to detect collisions instead of dates (handy for seg cmp)
 	
 	function renderSlotSegs(segs, modifiedEventId) {
 	
@@ -153,21 +189,15 @@ function AgendaEventRenderer() {
 			eventElements,
 			eventElement,
 			triggerRes,
-			vsideCache={},
-			hsideCache={},
-			key, val,
-			contentElement,
+			titleElement,
 			height,
 			slotSegmentContainer = getSlotSegmentContainer(),
-			rtl, dis, dit,
-			colCnt = getColCnt();
+			rtl, dis;
 			
 		if (rtl = opt('isRTL')) {
 			dis = -1;
-			dit = colCnt - 1;
 		}else{
 			dis = 1;
-			dit = 0;
 		}
 			
 		// calculate position/dimensions, create html
@@ -179,8 +209,8 @@ function AgendaEventRenderer() {
 			colI = seg.col;
 			levelI = seg.level;
 			forward = seg.forward || 0;
-			leftmost = colContentLeft(colI*dis + dit);
-			availWidth = colContentRight(colI*dis + dit) - leftmost;
+			leftmost = colContentLeft(colI);
+			availWidth = colContentRight(colI) - leftmost;
 			availWidth = Math.min(availWidth-6, availWidth*.95); // TODO: move this to CSS
 			if (levelI) {
 				// indented and thin
@@ -241,13 +271,11 @@ function AgendaEventRenderer() {
 		for (i=0; i<segCnt; i++) {
 			seg = segs[i];
 			if (eventElement = seg.element) {
-				val = vsideCache[key = seg.key = cssKey(eventElement[0])];
-				seg.vsides = val === undefined ? (vsideCache[key] = vsides(eventElement, true)) : val;
-				val = hsideCache[key];
-				seg.hsides = val === undefined ? (hsideCache[key] = hsides(eventElement, true)) : val;
-				contentElement = eventElement.find('div.fc-event-content');
-				if (contentElement.length) {
-					seg.contentTop = contentElement[0].offsetTop;
+				seg.vsides = vsides(eventElement, true);
+				seg.hsides = hsides(eventElement, true);
+				titleElement = eventElement.find('.fc-event-title');
+				if (titleElement.length) {
+					seg.contentTop = titleElement[0].offsetTop;
 				}
 			}
 		}
@@ -261,7 +289,7 @@ function AgendaEventRenderer() {
 				eventElement[0].style.height = height + 'px';
 				event = seg.event;
 				if (seg.contentTop !== undefined && height - seg.contentTop < 10) {
-					// not enough room for title, put it in the time header
+					// not enough room for title, put it in the time (TODO: maybe make both display:inline instead)
 					eventElement.find('div.fc-event-time')
 						.text(formatDate(event.start, opt('timeFormat')) + ' - ' + event.title);
 					eventElement.find('div.fc-event-title')
@@ -278,16 +306,15 @@ function AgendaEventRenderer() {
 		var html = "<";
 		var url = event.url;
 		var skinCss = getSkinCss(event, opt);
-		var skinCssAttr = (skinCss ? " style='" + skinCss + "'" : '');
-		var classes = ['fc-event', 'fc-event-skin', 'fc-event-vert'];
+		var classes = ['fc-event', 'fc-event-vert'];
 		if (isEventDraggable(event)) {
 			classes.push('fc-event-draggable');
 		}
 		if (seg.isStart) {
-			classes.push('fc-corner-top');
+			classes.push('fc-event-start');
 		}
 		if (seg.isEnd) {
-			classes.push('fc-corner-bottom');
+			classes.push('fc-event-end');
 		}
 		classes = classes.concat(event.className);
 		if (event.source) {
@@ -300,21 +327,23 @@ function AgendaEventRenderer() {
 		}
 		html +=
 			" class='" + classes.join(' ') + "'" +
-			" style='position:absolute;z-index:8;top:" + seg.top + "px;left:" + seg.left + "px;" + skinCss + "'" +
+			" style=" +
+				"'" +
+				"position:absolute;" +
+				"top:" + seg.top + "px;" +
+				"left:" + seg.left + "px;" +
+				skinCss +
+				"'" +
 			">" +
-			"<div class='fc-event-inner fc-event-skin'" + skinCssAttr + ">" +
-			"<div class='fc-event-head fc-event-skin'" + skinCssAttr + ">" +
+			"<div class='fc-event-inner'>" +
 			"<div class='fc-event-time'>" +
 			htmlEscape(formatDates(event.start, event.end, opt('timeFormat'))) +
 			"</div>" +
-			"</div>" +
-			"<div class='fc-event-content'>" +
 			"<div class='fc-event-title'>" +
-			htmlEscape(event.title) +
+			htmlEscape(event.title || '') +
 			"</div>" +
 			"</div>" +
-			"<div class='fc-event-bg'></div>" +
-			"</div>"; // close inner
+			"<div class='fc-event-bg'></div>";
 		if (seg.isEnd && isEventResizable(event)) {
 			html +=
 				"<div class='ui-resizable-handle ui-resizable-s'>=</div>";
@@ -322,18 +351,6 @@ function AgendaEventRenderer() {
 		html +=
 			"</" + (url ? "a" : "div") + ">";
 		return html;
-	}
-	
-	
-	function bindDaySeg(event, eventElement, seg) {
-		if (isEventDraggable(event)) {
-			draggableDayEvent(event, eventElement, seg.isStart);
-		}
-		if (seg.isEnd && isEventResizable(event)) {
-			resizableDayEvent(event, eventElement, seg);
-		}
-		eventElementHandlers(event, eventElement);
-			// needs to be after, because resizableDayEvent might stopImmediatePropagation on click
 	}
 	
 	
@@ -355,31 +372,34 @@ function AgendaEventRenderer() {
 	
 	
 	// when event starts out FULL-DAY
+	// overrides DayEventRenderer's version because it needs to account for dragging elements
+	// to and from the slot area.
 	
-	function draggableDayEvent(event, eventElement, isStart) {
+	function draggableDayEvent(event, eventElement, seg) {
+		var isStart = seg.isStart;
 		var origWidth;
 		var revert;
-		var allDay=true;
+		var allDay = true;
 		var dayDelta;
-		var dis = opt('isRTL') ? -1 : 1;
 		var hoverListener = getHoverListener();
 		var colWidth = getColWidth();
-		var slotHeight = getSlotHeight();
+		var snapHeight = getSnapHeight();
+		var snapMinutes = getSnapMinutes();
 		var minMinute = getMinMinute();
 		eventElement.draggable({
-			zIndex: 9,
 			opacity: opt('dragOpacity', 'month'), // use whatever the month view was using
 			revertDuration: opt('dragRevertDuration'),
 			start: function(ev, ui) {
 				trigger('eventDragStart', eventElement, event, ev, ui);
 				hideEvents(event, eventElement);
 				origWidth = eventElement.width();
-				hoverListener.start(function(cell, origCell, rowDelta, colDelta) {
+				hoverListener.start(function(cell, origCell) {
 					clearOverlays();
 					if (cell) {
-						//setOverflowHidden(true);
 						revert = false;
-						dayDelta = colDelta * dis;
+						var origDate = cellToDate(0, origCell.col);
+						var date = cellToDate(0, cell.col);
+						dayDelta = dayDiff(date, origDate);
 						if (!cell.row) {
 							// on full-days
 							renderDayOverlay(
@@ -395,9 +415,9 @@ function AgendaEventRenderer() {
 									eventElement.width(colWidth - 10); // don't use entire width
 									setOuterHeight(
 										eventElement,
-										slotHeight * Math.round(
-											(event.end ? ((event.end - event.start) / MINUTE_MS) : opt('defaultEventMinutes'))
-											/ opt('slotMinutes')
+										snapHeight * Math.round(
+											(event.end ? ((event.end - event.start) / MINUTE_MS) : opt('defaultEventMinutes')) /
+												snapMinutes
 										)
 									);
 									eventElement.draggable('option', 'grid', [colWidth, 1]);
@@ -410,7 +430,6 @@ function AgendaEventRenderer() {
 						revert = revert || (allDay && !dayDelta);
 					}else{
 						resetElement();
-						//setOverflowHidden(false);
 						revert = true;
 					}
 					eventElement.draggable('option', 'revert', revert);
@@ -429,14 +448,13 @@ function AgendaEventRenderer() {
 					// changed!
 					var minuteDelta = 0;
 					if (!allDay) {
-						minuteDelta = Math.round((eventElement.offset().top - getBodyContent().offset().top) / slotHeight)
-							* opt('slotMinutes')
+						minuteDelta = Math.round((eventElement.offset().top - getSlotContainer().offset().top) / snapHeight)
+							* snapMinutes
 							+ minMinute
 							- (event.start.getHours() * 60 + event.start.getMinutes());
 					}
 					eventDrop(this, event, dayDelta, minuteDelta, allDay, ev, ui);
 				}
-				//setOverflowHidden(false);
 			}
 		});
 		function resetElement() {
@@ -454,78 +472,147 @@ function AgendaEventRenderer() {
 	// when event starts out IN TIMESLOTS
 	
 	function draggableSlotEvent(event, eventElement, timeElement) {
-		var origPosition;
-		var allDay=false;
-		var dayDelta;
-		var minuteDelta;
-		var prevMinuteDelta;
-		var dis = opt('isRTL') ? -1 : 1;
-		var hoverListener = getHoverListener();
+		var coordinateGrid = t.getCoordinateGrid();
 		var colCnt = getColCnt();
 		var colWidth = getColWidth();
-		var slotHeight = getSlotHeight();
+		var snapHeight = getSnapHeight();
+		var snapMinutes = getSnapMinutes();
+
+		// states
+		var origPosition; // original position of the element, not the mouse
+		var origCell;
+		var isInBounds, prevIsInBounds;
+		var isAllDay, prevIsAllDay;
+		var colDelta, prevColDelta;
+		var dayDelta; // derived from colDelta
+		var minuteDelta, prevMinuteDelta;
+
 		eventElement.draggable({
-			zIndex: 9,
 			scroll: false,
-			grid: [colWidth, slotHeight],
+			grid: [ colWidth, snapHeight ],
 			axis: colCnt==1 ? 'y' : false,
 			opacity: opt('dragOpacity'),
 			revertDuration: opt('dragRevertDuration'),
 			start: function(ev, ui) {
+
 				trigger('eventDragStart', eventElement, event, ev, ui);
 				hideEvents(event, eventElement);
+
+				coordinateGrid.build();
+
+				// initialize states
 				origPosition = eventElement.position();
+				origCell = coordinateGrid.cell(ev.pageX, ev.pageY);
+				isInBounds = prevIsInBounds = true;
+				isAllDay = prevIsAllDay = getIsCellAllDay(origCell);
+				colDelta = prevColDelta = 0;
+				dayDelta = 0;
 				minuteDelta = prevMinuteDelta = 0;
-				hoverListener.start(function(cell, origCell, rowDelta, colDelta) {
-					eventElement.draggable('option', 'revert', !cell);
-					clearOverlays();
-					if (cell) {
-						dayDelta = colDelta * dis;
-						if (opt('allDaySlot') && !cell.row) {
-							// over full days
-							if (!allDay) {
-								// convert to temporary all-day event
-								allDay = true;
-								timeElement.hide();
-								eventElement.draggable('option', 'grid', null);
-							}
-							renderDayOverlay(
-								addDays(cloneDate(event.start), dayDelta),
-								addDays(exclEndDay(event), dayDelta)
-							);
-						}else{
-							// on slots
-							resetElement();
-						}
-					}
-				}, ev, 'drag');
+
 			},
 			drag: function(ev, ui) {
-				minuteDelta = Math.round((ui.position.top - origPosition.top) / slotHeight) * opt('slotMinutes');
-				if (minuteDelta != prevMinuteDelta) {
-					if (!allDay) {
-						updateTimeText(minuteDelta);
+
+				// NOTE: this `cell` value is only useful for determining in-bounds and all-day.
+				// Bad for anything else due to the discrepancy between the mouse position and the
+				// element position while snapping. (problem revealed in PR #55)
+				//
+				// PS- the problem exists for draggableDayEvent() when dragging an all-day event to a slot event.
+				// We should overhaul the dragging system and stop relying on jQuery UI.
+				var cell = coordinateGrid.cell(ev.pageX, ev.pageY);
+
+				// update states
+				isInBounds = !!cell;
+				if (isInBounds) {
+					isAllDay = getIsCellAllDay(cell);
+
+					// calculate column delta
+					colDelta = Math.round((ui.position.left - origPosition.left) / colWidth);
+					if (colDelta != prevColDelta) {
+						// calculate the day delta based off of the original clicked column and the column delta
+						var origDate = cellToDate(0, origCell.col);
+						var col = origCell.col + colDelta;
+						col = Math.max(0, col);
+						col = Math.min(colCnt-1, col);
+						var date = cellToDate(0, col);
+						dayDelta = dayDiff(date, origDate);
 					}
+
+					// calculate minute delta (only if over slots)
+					if (!isAllDay) {
+						minuteDelta = Math.round((ui.position.top - origPosition.top) / snapHeight) * snapMinutes;
+					}
+				}
+
+				// any state changes?
+				if (
+					isInBounds != prevIsInBounds ||
+					isAllDay != prevIsAllDay ||
+					colDelta != prevColDelta ||
+					minuteDelta != prevMinuteDelta
+				) {
+
+					updateUI();
+
+					// update previous states for next time
+					prevIsInBounds = isInBounds;
+					prevIsAllDay = isAllDay;
+					prevColDelta = colDelta;
 					prevMinuteDelta = minuteDelta;
 				}
+
+				// if out-of-bounds, revert when done, and vice versa.
+				eventElement.draggable('option', 'revert', !isInBounds);
+
 			},
 			stop: function(ev, ui) {
-				var cell = hoverListener.stop();
+
 				clearOverlays();
 				trigger('eventDragStop', eventElement, event, ev, ui);
-				if (cell && (dayDelta || minuteDelta || allDay)) {
-					// changed!
-					eventDrop(this, event, dayDelta, allDay ? 0 : minuteDelta, allDay, ev, ui);
-				}else{
-					// either no change or out-of-bounds (draggable has already reverted)
-					resetElement();
+
+				if (isInBounds && (isAllDay || dayDelta || minuteDelta)) { // changed!
+					eventDrop(this, event, dayDelta, isAllDay ? 0 : minuteDelta, isAllDay, ev, ui);
+				}
+				else { // either no change or out-of-bounds (draggable has already reverted)
+
+					// reset states for next time, and for updateUI()
+					isInBounds = true;
+					isAllDay = false;
+					colDelta = 0;
+					dayDelta = 0;
+					minuteDelta = 0;
+
+					updateUI();
 					eventElement.css('filter', ''); // clear IE opacity side-effects
-					eventElement.css(origPosition); // sometimes fast drags make event revert to wrong position
-					updateTimeText(0);
+
+					// sometimes fast drags make event revert to wrong position, so reset.
+					// also, if we dragged the element out of the area because of snapping,
+					// but the *mouse* is still in bounds, we need to reset the position.
+					eventElement.css(origPosition);
+
 					showEvents(event, eventElement);
 				}
 			}
 		});
+
+		function updateUI() {
+			clearOverlays();
+			if (isInBounds) {
+				if (isAllDay) {
+					timeElement.hide();
+					eventElement.draggable('option', 'grid', null); // disable grid snapping
+					renderDayOverlay(
+						addDays(cloneDate(event.start), dayDelta),
+						addDays(exclEndDay(event), dayDelta)
+					);
+				}
+				else {
+					updateTimeText(minuteDelta);
+					timeElement.css('display', ''); // show() was causing display=inline
+					eventElement.draggable('option', 'grid', [colWidth, snapHeight]); // re-enable grid snapping
+				}
+			}
+		}
+
 		function updateTimeText(minuteDelta) {
 			var newStart = addMinutes(cloneDate(event.start), minuteDelta);
 			var newEnd;
@@ -534,14 +621,7 @@ function AgendaEventRenderer() {
 			}
 			timeElement.text(formatDates(newStart, newEnd, opt('timeFormat')));
 		}
-		function resetElement() {
-			// convert back to original slot-event
-			if (allDay) {
-				timeElement.css('display', ''); // show() was causing display=inline
-				eventElement.draggable('option', 'grid', [colWidth, slotHeight]);
-				allDay = false;
-			}
-		}
+
 	}
 	
 	
@@ -551,40 +631,39 @@ function AgendaEventRenderer() {
 	
 	
 	function resizableSlotEvent(event, eventElement, timeElement) {
-		var slotDelta, prevSlotDelta;
-		var slotHeight = getSlotHeight();
+		var snapDelta, prevSnapDelta;
+		var snapHeight = getSnapHeight();
+		var snapMinutes = getSnapMinutes();
 		eventElement.resizable({
 			handles: {
-				s: 'div.ui-resizable-s'
+				s: '.ui-resizable-handle'
 			},
-			grid: slotHeight,
+			grid: snapHeight,
 			start: function(ev, ui) {
-				slotDelta = prevSlotDelta = 0;
+				snapDelta = prevSnapDelta = 0;
 				hideEvents(event, eventElement);
-				eventElement.css('z-index', 9);
 				trigger('eventResizeStart', this, event, ev, ui);
 			},
 			resize: function(ev, ui) {
 				// don't rely on ui.size.height, doesn't take grid into account
-				slotDelta = Math.round((Math.max(slotHeight, eventElement.height()) - ui.originalSize.height) / slotHeight);
-				if (slotDelta != prevSlotDelta) {
+				snapDelta = Math.round((Math.max(snapHeight, eventElement.height()) - ui.originalSize.height) / snapHeight);
+				if (snapDelta != prevSnapDelta) {
 					timeElement.text(
 						formatDates(
 							event.start,
-							(!slotDelta && !event.end) ? null : // no change, so don't display time range
-								addMinutes(eventEnd(event), opt('slotMinutes')*slotDelta),
+							(!snapDelta && !event.end) ? null : // no change, so don't display time range
+								addMinutes(eventEnd(event), snapMinutes*snapDelta),
 							opt('timeFormat')
 						)
 					);
-					prevSlotDelta = slotDelta;
+					prevSnapDelta = snapDelta;
 				}
 			},
 			stop: function(ev, ui) {
 				trigger('eventResizeStop', this, event, ev, ui);
-				if (slotDelta) {
-					eventResize(this, event, 0, opt('slotMinutes')*slotDelta, ev, ui);
+				if (snapDelta) {
+					eventResize(this, event, 0, snapMinutes*snapDelta, ev, ui);
 				}else{
-					eventElement.css('z-index', 8);
 					showEvents(event, eventElement);
 					// BUG: if event was really short, need to put title back in span
 				}
@@ -596,6 +675,45 @@ function AgendaEventRenderer() {
 }
 
 
+
+/* Agenda Event Segment Utilities
+-----------------------------------------------------------------------------*/
+// TODO: maybe somehow consolidate this with DayEventRenderer's segment system
+
+
+function stackAgendaSegs(segs) {
+	var levels = [],
+		i, len = segs.length, seg,
+		j, collide, k;
+	for (i=0; i<len; i++) {
+		seg = segs[i];
+		j = 0; // the level index where seg should belong
+		while (true) {
+			collide = false;
+			if (levels[j]) {
+				for (k=0; k<levels[j].length; k++) {
+					if (agendaSegsCollide(levels[j][k], seg)) {
+						collide = true;
+						break;
+					}
+				}
+			}
+			if (collide) {
+				j++;
+			}else{
+				break;
+			}
+		}
+		if (levels[j]) {
+			levels[j].push(seg);
+		}else{
+			levels[j] = [seg];
+		}
+	}
+	return levels;
+}
+
+
 function countForwardSegs(levels) {
 	var i, j, k, level, segForward, segBack;
 	for (i=levels.length-1; i>0; i--) {
@@ -604,7 +722,7 @@ function countForwardSegs(levels) {
 			segForward = level[j];
 			for (k=0; k<levels[i-1].length; k++) {
 				segBack = levels[i-1][k];
-				if (segsCollide(segForward, segBack)) {
+				if (agendaSegsCollide(segForward, segBack)) {
 					segBack.forward = Math.max(segBack.forward||0, (segForward.forward||0)+1);
 				}
 			}
@@ -612,4 +730,8 @@ function countForwardSegs(levels) {
 	}
 }
 
+
+function agendaSegsCollide(seg1, seg2) {
+	return seg1.end > seg2.start && seg1.start < seg2.end;
+}
 

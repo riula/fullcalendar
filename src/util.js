@@ -18,6 +18,7 @@ function exclEndDay(event) {
 function _exclEndDay(end, allDay) {
 	end = cloneDate(end);
 	return allDay || end.getHours() || end.getMinutes() ? addDays(end, 1) : clearTime(end);
+	// why don't we check for seconds/ms too?
 }
 
 
@@ -110,7 +111,6 @@ function stackSegs(segs) {
 }
 
 
-
 /* Event Element Binding
 -----------------------------------------------------------------------------*/
 
@@ -201,15 +201,6 @@ function vborders(element) {
 }
 
 
-function setMinHeight(element, height) {
-	height = (typeof height == 'number' ? height + 'px' : height);
-	element.each(function(i, _element) {
-		_element.style.cssText += ';min-height:' + height + ';_height:' + height;
-		// why can't we just use .css() ? i forget
-	});
-}
-
-
 
 /* Misc Utils
 -----------------------------------------------------------------------------*/
@@ -222,7 +213,7 @@ function setMinHeight(element, height) {
 function noop() { }
 
 
-function cmp(a, b) {
+function dateCompare(a, b) {
 	return a - b;
 }
 
@@ -262,11 +253,9 @@ function htmlEscape(s) {
 		.replace(/\n/g, '<br />');
 }
 
-
 function cssKey(_element) {
 	return _element.id + '/' + _element.className + '/' + _element.style.cssText.replace(/(^|;)\s*(top|left|width|height)\s*:[^;]*/ig, '');
 }
-
 
 function disableTextSelection(element) {
 	element

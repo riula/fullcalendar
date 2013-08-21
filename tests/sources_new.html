@@ -1,9 +1,13 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!DOCTYPE html>
 <html>
 <head>
-<script type='text/javascript' src='../src/_loader.js?debug'></script>
-<script type='text/javascript' src='../src/gcal/_loader.js'></script>
-<script type='text/javascript'>
+<link href='../build/out/fullcalendar.css' rel='stylesheet' />
+<link href='../build/out/fullcalendar.print.css' rel='stylesheet' media='print' />
+<script src='../build/out/jquery.js'></script>
+<script src='../build/out/jquery-ui.js'></script>
+<script src='../build/out/fullcalendar.js'></script>
+<script src='../build/out/gcal.js'></script>
+<script>
 
 /*
 
@@ -55,9 +59,13 @@ $(document).ready(function() {
 			center: 'title',
 			right: 'month,agendaWeek,basicWeek,agendaDay,basicDay'
 		},
+
 		editable: true,
-		//disableResizing: true,
-		//disableDragging: true,
+		//eventStartEditable: false,
+		//eventDurationEditable: false,
+		//disableResizing: true, // deprecated
+		//disableDragging: true, // deprecated
+
 		selectable: true,
 		selectHelper: true,
 		dragOpacity: .5,
@@ -94,9 +102,14 @@ $(document).ready(function() {
 		
 			{
 				color: 'purple',
+				//editable: false,
+				//startEditable: false,
+				//durationEditable: false,
 				events: [
 					{
 						title: 'All Day Event',
+						//startEditable: false,
+						//durationEditable: false,
 						start: new Date(y, m, 1)
 					},
 					{
@@ -159,7 +172,7 @@ $(document).ready(function() {
 });
 
 </script>
-<style type='text/css'>
+<style>
 
 body {
 	margin-top: 40px;
